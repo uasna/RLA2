@@ -308,3 +308,27 @@ body {
   color: var(--text-dim);
   box-shadow: none;
 }
+
+/* ── Fase 7F: source badge & mono item ─────────────────────────── */
+.source-badge {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.source-badge--json {
+  color: var(--success);
+  border-color: var(--tone-success-border);
+  background: var(--tone-success-bg);
+}
+
+.source-badge--mock {
+  color: var(--warning);
+  border-color: var(--tone-warning-border);
+  background: var(--tone-warning-bg);
+}
+
+.sidebar-item--mono {
+  font-family: "Courier New", "Consolas", monospace;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}

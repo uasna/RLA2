@@ -6,26 +6,46 @@ import { loadDashboardPayload } from "./services/dashboardData";
 
 const TABS = ["Overview", "Movement", "Boost", "Offence", "Defence"];
 
+function formatTime(d: Date): string {
+  return d.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 export default function App() {
-  const [payload, setPayload] = React.useState<DashboardCompactPayload>(mockDashboardPayload);
+  const [payload, setPayload] =
+    React.useState<DashboardCompactPayload>(mockDashboardPayload);
   const [dataSource, setDataSource] = React.useState<"mock" | "json">("mock");
   const [isRefreshing, setIsRefreshing] = React.useState(false);
-  const [lastLoadedAt, setLastLoadedAt] = React.useState<string | null>(null);
+  const [lastLoadedAt, setLastLoadedAt] = React.useState<Date | null>(null);
 
   const refreshPayload = React.useCallback(async () => {
     setIsRefreshing(true);
-
     try {
-      const loaded = await loadDashboardPayload();
+      // Attempt to fetch the real JSON directly so we can detect the source
+      // without modifying dashboardData.ts.
+      let loaded: DashboardCompactPayload;
+      let source: "mock" | "json" = "mock";
+
+      try {
+        const res = await fetch("/dashboard_payload.json", {
+          cache: "no-store",
+        });
+        if (res.ok) {
+          loaded = (await res.json()) as DashboardCompactPayload;
+          source = "json";
+        } else {
+          loaded = await loadDashboardPayload(); // returns mock as fallback
+        }
+      } catch {
+        loaded = await loadDashboardPayload(); // returns mock as fallback
+      }
+
       setPayload(loaded);
-      setDataSource(loaded === mockDashboardPayload ? "mock" : "json");
-      setLastLoadedAt(
-        new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        })
-      );
+      setDataSource(source);
+      setLastLoadedAt(new Date());
     } finally {
       setIsRefreshing(false);
     }
@@ -35,14 +55,19 @@ export default function App() {
     void refreshPayload();
   }, [refreshPayload]);
 
-  const { system_status, session_summary, metric_cards, recent_matches } = payload;
-  const statusClass = system_status.state === "Ready" ? "ready" : "partial";
+  const { system_status, session_summary, metric_cards, recent_matches } =
+    payload;
+  const statusClass =
+    system_status.state === "Ready" ? "ready" : "partial";
 
   return (
     <div className="app-shell">
+      {/* ── SIDEBAR ── */}
       <aside className="sidebar">
         <div className="sidebar-title">
-          Rocket League<br />Analyser
+          Rocket League
+          <br />
+          Analyser
         </div>
 
         <div className="sidebar-mode">
@@ -57,18 +82,32 @@ export default function App() {
 
         <div className="sidebar-meta">
           {system_status.latest_display_map && (
-            <span className="sidebar-item">Last: {system_status.latest_display_map}</span>
+            <span className="sidebar-item">
+              Last: {system_status.latest_display_map}
+            </span>
           )}
-          <span className="sidebar-item">Loaded: {payload.summary.total_loaded}</span>
-          <span className="sidebar-item">Data source: {dataSource}</span>
-          <span className="sidebar-item">Last load: {lastLoadedAt ?? "—"}</span>
+          <span className="sidebar-item">
+            Loaded: {payload.summary.total_loaded}
+          </span>
+          <span className={`sidebar-item source-badge source-badge--${dataSource}`}>
+            Data source: {dataSource}
+          </span>
+          <span className="sidebar-item sidebar-item--mono">
+            Last load: {lastLoadedAt ? formatTime(lastLoadedAt) : "—"}
+          </span>
         </div>
 
-        <button className="await-btn" onClick={refreshPayload} disabled={isRefreshing}>
-          {isRefreshing ? "Refreshing..." : "Refresh Payload"}
+        <button
+          className="await-btn"
+          onClick={refreshPayload}
+          disabled={isRefreshing}
+          aria-label="Refresh payload from backend"
+        >
+          {isRefreshing ? "Refreshing…" : "⟳ Refresh Payload"}
         </button>
       </aside>
 
+      {/* ── MAIN PANEL ── */}
       <main className="main-panel">
         <h2 className="panel-heading">Today's Snapshot</h2>
 
@@ -96,10 +135,14 @@ export default function App() {
         </div>
       </main>
 
+      {/* ── DETAILS PANEL ── */}
       <aside className="details-panel">
         <div className="tab-row">
           {TABS.map((tab, index) => (
-            <button className={`tab-button${index === 0 ? " active" : ""}`} key={tab}>
+            <button
+              className={`tab-button${index === 0 ? " active" : ""}`}
+              key={tab}
+            >
               {tab}
             </button>
           ))}
@@ -109,26 +152,37 @@ export default function App() {
 
         <div className="metric-card">
           <div className="metric-label">Session</div>
-          <div className="metric-value">{session_summary.match_count} matches</div>
-          <div className="metric-sub">{session_summary.total_minutes_label} min total</div>
+          <div className="metric-value">
+            {session_summary.match_count} matches
+          </div>
+          <div className="metric-sub">
+            {session_summary.total_minutes_label} min total
+          </div>
         </div>
 
         <div className="metric-card">
           <div className="metric-label">Avg duration</div>
-          <div className="metric-value">{session_summary.average_match_minutes_label} min</div>
+          <div className="metric-value">
+            {session_summary.average_match_minutes_label} min
+          </div>
           <div className="metric-sub">per match</div>
         </div>
 
         <div className="metric-card">
           <div className="metric-label">Maps played</div>
-          <div className="metric-value" style={{ fontSize: "13px", lineHeight: "1.6" }}>
+          <div
+            className="metric-value"
+            style={{ fontSize: "13px", lineHeight: "1.6" }}
+          >
             {session_summary.unique_display_maps.join(", ") || "—"}
           </div>
         </div>
 
         <div className="metric-card bridge-card">
           <div className="metric-label">Backend bridge</div>
-          <div className="metric-value">Ready</div>
+          <div className="metric-value">
+            {dataSource === "json" ? "Connected" : "Ready"}
+          </div>
           <div className="metric-sub">
             {dataSource === "json"
               ? "Loaded from dashboard_payload.json"

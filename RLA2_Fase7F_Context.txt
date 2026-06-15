@@ -1,0 +1,738 @@
+﻿==============================
+FILE: frontend/src/types/dashboardPayload.ts
+==============================
+// Auto-aligned with docs/ui_payload_contract.md and rla_app.api.ui_bridge compact payload.
+// Do not calculate W/L from score_label yet. Team assignment is not available.
+
+export type CardTone = "neutral" | "success" | "warning";
+export type SystemState = "Ready" | "Partial" | "Awaiting replay";
+export type MapNameSource = "known" | "fallback" | "missing";
+
+export interface AppInfo {
+  name: string;
+  version: string;
+}
+
+export interface DatabaseInfo {
+  path: string;
+}
+
+export interface DashboardSummary {
+  total_loaded: number;
+  metadata_ready: number;
+  metadata_missing: number;
+  latest_match_date: string | null;
+}
+
+export interface SessionSnapshot {
+  loaded_matches: number;
+  total_matches: number;
+  metadata_ready: number;
+  metadata_missing: number;
+  latest_day: string | null;
+  matches_on_latest_day: number;
+  online_matches: number;
+  private_matches: number;
+  other_match_types: number;
+  most_played_map: string | null;
+  most_common_team_size: number | null;
+  total_seconds: number;
+  total_minutes_label: string;
+  average_match_seconds: number | null;
+  average_match_minutes_label: string;
+  session_start: string | null;
+  session_end: string | null;
+  session_gap_hours: number;
+}
+
+export interface SessionSummary {
+  title: string;
+  match_count: number;
+  session_start: string | null;
+  session_end: string | null;
+  total_minutes_label: string;
+  average_match_minutes_label: string;
+  most_played_map: string | null;
+  most_played_display_map: string | null;
+  most_common_team_size: number | null;
+  unique_maps: string[];
+  unique_display_maps: string[];
+  match_types: string[];
+  team_sizes: number[];
+  latest_map: string | null;
+  latest_display_map: string | null;
+  latest_match_type: string | null;
+  latest_score_label: string | null;
+}
+
+export interface SystemStatus {
+  state: SystemState;
+  message: string;
+  has_matches: boolean;
+  has_active_session: boolean;
+  total_loaded: number;
+  metadata_ready: number;
+  metadata_missing: number;
+  latest_match_date: string | null;
+  latest_map: string | null;
+  latest_display_map: string | null;
+  latest_match_type: string | null;
+  latest_parse_level: string | null;
+  latest_metadata_ready: boolean;
+  active_session_count: number;
+}
+
+export interface MetricCard {
+  id: string;
+  label: string;
+  value: string;
+  sublabel: string;
+  tone: CardTone;
+}
+
+export interface MatchItem {
+  id: number;
+  file_name: string;
+  status: string | null;
+  parse_status: string | null;
+  parse_level: string | null;
+  meta_status: string | null;
+  date: string | null;
+  map_name: string | null;
+  match_type: string | null;
+  team_size: number | null;
+  team0_score: number | null;
+  team1_score: number | null;
+  total_seconds_played: number | null;
+  replay_name: string | null;
+  score_label: string;
+  seconds_label: string;
+  metadata_ready: boolean;
+  display_map_name: string;
+  short_map_name: string;
+  map_family: string | null;
+  map_variant: string | null;
+  map_name_source: MapNameSource;
+}
+
+export interface DashboardCompactPayload {
+  app: AppInfo;
+  database: DatabaseInfo;
+  summary: DashboardSummary;
+  snapshot: SessionSnapshot;
+  session_summary: SessionSummary;
+  system_status: SystemStatus;
+  metric_cards: MetricCard[];
+  active_session_matches: MatchItem[];
+  recent_matches: MatchItem[];
+}
+
+
+==============================
+FILE: frontend/src/services/dashboardData.ts
+==============================
+import type { DashboardCompactPayload } from "../types/dashboardPayload";
+import { mockDashboardPayload } from "../mock/mockDashboardPayload";
+
+const DASHBOARD_PAYLOAD_PATH = "./dashboard_payload.json";
+
+export async function loadDashboardPayload(): Promise<DashboardCompactPayload> {
+  try {
+    const res = await fetch(DASHBOARD_PAYLOAD_PATH, {
+      cache: "no-store",
+    });
+
+    if (!res.ok) return mockDashboardPayload;
+
+    const data = (await res.json()) as DashboardCompactPayload;
+    return data;
+  } catch {
+    return mockDashboardPayload;
+  }
+}
+
+
+==============================
+FILE: frontend/src/App.tsx
+==============================
+import React from "react";
+import "./styles.css";
+import type { DashboardCompactPayload } from "./types/dashboardPayload";
+import { mockDashboardPayload } from "./mock/mockDashboardPayload";
+import { loadDashboardPayload } from "./services/dashboardData";
+
+const TABS = ["Overview", "Movement", "Boost", "Offence", "Defence"];
+
+export default function App() {
+  const [payload, setPayload] = React.useState<DashboardCompactPayload>(mockDashboardPayload);
+  const [dataSource, setDataSource] = React.useState<"mock" | "json">("mock");
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [lastLoadedAt, setLastLoadedAt] = React.useState<string | null>(null);
+
+  const refreshPayload = React.useCallback(async () => {
+    setIsRefreshing(true);
+
+    try {
+      const loaded = await loadDashboardPayload();
+      setPayload(loaded);
+      setDataSource(loaded === mockDashboardPayload ? "mock" : "json");
+      setLastLoadedAt(
+        new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        })
+      );
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void refreshPayload();
+  }, [refreshPayload]);
+
+  const { system_status, session_summary, metric_cards, recent_matches } = payload;
+  const statusClass = system_status.state === "Ready" ? "ready" : "partial";
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="sidebar-title">
+          Rocket League<br />Analyser
+        </div>
+
+        <div className="sidebar-mode">
+          {session_summary.most_common_team_size
+            ? `${session_summary.most_common_team_size}v${session_summary.most_common_team_size}`
+            : "2v2"}
+        </div>
+
+        <div className={`status-pill ${statusClass}`}>
+          â— {system_status.state}
+        </div>
+
+        <div className="sidebar-meta">
+          {system_status.latest_display_map && (
+            <span className="sidebar-item">Last: {system_status.latest_display_map}</span>
+          )}
+          <span className="sidebar-item">Loaded: {payload.summary.total_loaded}</span>
+          <span className="sidebar-item">Data source: {dataSource}</span>
+          <span className="sidebar-item">Last load: {lastLoadedAt ?? "â€”"}</span>
+        </div>
+
+        <button className="await-btn" onClick={refreshPayload} disabled={isRefreshing}>
+          {isRefreshing ? "Refreshing..." : "Refresh Payload"}
+        </button>
+      </aside>
+
+      <main className="main-panel">
+        <h2 className="panel-heading">Today's Snapshot</h2>
+
+        <div className="metric-grid">
+          {metric_cards.map((card) => (
+            <div className={`metric-card tone-${card.tone}`} key={card.id}>
+              <div className="metric-label">{card.label}</div>
+              <div className="metric-value">{card.value}</div>
+              <div className="metric-sub">{card.sublabel}</div>
+            </div>
+          ))}
+        </div>
+
+        <h3 className="section-heading">Last Games</h3>
+
+        <div className="game-list">
+          {recent_matches.map((match) => (
+            <div className="game-row" key={match.id}>
+              <span className="game-map">{match.display_map_name}</span>
+              <span className="game-type">{match.match_type ?? "â€”"}</span>
+              <span className="game-score">{match.score_label}</span>
+              <span className="game-secs">{match.seconds_label} min</span>
+            </div>
+          ))}
+        </div>
+      </main>
+
+      <aside className="details-panel">
+        <div className="tab-row">
+          {TABS.map((tab, index) => (
+            <button className={`tab-button${index === 0 ? " active" : ""}`} key={tab}>
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        <h3 className="section-heading">Session Performance</h3>
+
+        <div className="metric-card">
+          <div className="metric-label">Session</div>
+          <div className="metric-value">{session_summary.match_count} matches</div>
+          <div className="metric-sub">{session_summary.total_minutes_label} min total</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-label">Avg duration</div>
+          <div className="metric-value">{session_summary.average_match_minutes_label} min</div>
+          <div className="metric-sub">per match</div>
+        </div>
+
+        <div className="metric-card">
+          <div className="metric-label">Maps played</div>
+          <div className="metric-value" style={{ fontSize: "13px", lineHeight: "1.6" }}>
+            {session_summary.unique_display_maps.join(", ") || "â€”"}
+          </div>
+        </div>
+
+        <div className="metric-card bridge-card">
+          <div className="metric-label">Backend bridge</div>
+          <div className="metric-value">Ready</div>
+          <div className="metric-sub">
+            {dataSource === "json"
+              ? "Loaded from dashboard_payload.json"
+              : "Using mock â€” export payload to load real data"}
+          </div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+
+==============================
+FILE: frontend/src/styles.css
+==============================
+/* â”€â”€ Reset & Base â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:           #0d0f18;
+  --bg-side:      #090b12;
+  --bg-card:      #13161f;
+  --bg-card-hover:#1a1e2d;
+  --bg-row-hover: #161926;
+  --border:       #1e2236;
+  --border-mid:   #252a3e;
+
+  --text:         #dde3f0;
+  --text-sub:     #5a6280;
+  --text-dim:     #3e4560;
+
+  --accent-blue:  #4a7ef7;
+  --accent-orange:#f97316;
+  --success:      #22c55e;
+  --warning:      #f59e0b;
+
+  --tone-success-bg:    #0d2218;
+  --tone-success-border:#1a4a2e;
+  --tone-success-text:  #22c55e;
+
+  --tone-warning-bg:    #211608;
+  --tone-warning-border:#4a2e08;
+  --tone-warning-text:  #f59e0b;
+
+  --tone-neutral-bg:    #101420;
+  --tone-neutral-border:#1e2540;
+  --tone-neutral-text:  #4a7ef7;
+
+  --radius-sm:  6px;
+  --radius:     10px;
+  --radius-lg:  14px;
+  --gap:        14px;
+  --trans:      120ms ease;
+}
+
+::selection { background: #2a3a6a; color: var(--text); }
+
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: #1e2236; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #2a2e44; }
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* â”€â”€ App Shell â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.app-shell {
+  display: grid;
+  grid-template-columns: 210px 1fr 290px;
+  grid-template-rows: 100vh;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* â”€â”€ Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.sidebar {
+  background: var(--bg-side);
+  border-right: 1px solid var(--border);
+  padding: 28px 18px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+}
+
+.sidebar-title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.sidebar-mode {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-sub);
+  background: var(--bg-card);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  width: fit-content;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  width: fit-content;
+}
+.status-pill.ready   { background: var(--tone-success-bg); color: var(--success); border: 1px solid var(--tone-success-border); }
+.status-pill.partial { background: var(--tone-warning-bg); color: var(--warning); border: 1px solid var(--tone-warning-border); }
+
+.sidebar-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sidebar-item {
+  font-size: 11px;
+  color: var(--text-sub);
+  padding: 4px 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.await-btn {
+  margin-top: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-mid);
+  color: var(--text-sub);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--trans), border-color var(--trans), color var(--trans);
+}
+.await-btn:hover       { background: var(--bg-card-hover); border-color: var(--accent-blue); color: var(--text); }
+.await-btn:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+
+/* â”€â”€ Main Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.main-panel {
+  padding: 32px 28px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.panel-heading {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.section-heading {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+}
+
+/* â”€â”€ Metric Grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--gap);
+}
+
+.metric-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: background var(--trans), border-color var(--trans);
+  cursor: default;
+}
+.metric-card:hover { background: var(--bg-card-hover); border-color: var(--border-mid); }
+
+.metric-card.tone-success { background: var(--tone-success-bg); border-color: var(--tone-success-border); }
+.metric-card.tone-warning { background: var(--tone-warning-bg); border-color: var(--tone-warning-border); }
+.metric-card.tone-neutral { background: var(--tone-neutral-bg); border-color: var(--tone-neutral-border); }
+
+.metric-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-sub);
+}
+.metric-card.tone-success .metric-label { color: var(--tone-success-text); opacity: .75; }
+.metric-card.tone-warning .metric-label { color: var(--tone-warning-text); opacity: .75; }
+.metric-card.tone-neutral .metric-label { color: var(--tone-neutral-text); opacity: .75; }
+
+.metric-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.metric-card.tone-success .metric-value { color: var(--tone-success-text); }
+.metric-card.tone-warning .metric-value { color: var(--tone-warning-text); }
+
+.metric-sub { font-size: 11px; color: var(--text-sub); }
+
+/* â”€â”€ Game List â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.game-list { display: flex; flex-direction: column; gap: 5px; }
+
+.game-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 16px;
+  align-items: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 16px;
+  transition: background var(--trans), border-color var(--trans);
+  cursor: default;
+}
+.game-row:hover { background: var(--bg-row-hover); border-color: var(--border-mid); }
+
+.game-map   { font-size: 13px; color: var(--text);     font-weight: 500; }
+.game-type  { font-size: 11px; color: var(--text-sub); }
+.game-score { font-size: 13px; color: var(--accent-blue); font-weight: 700; min-width: 36px; text-align: center; }
+.game-secs  { font-size: 11px; color: var(--text-sub); min-width: 52px; text-align: right; }
+
+/* â”€â”€ Details Panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.details-panel {
+  background: var(--bg-side);
+  border-left: 1px solid var(--border);
+  padding: 28px 18px 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* â”€â”€ Tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.tab-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab-button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-sub);
+  border-radius: var(--radius-sm);
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--trans), color var(--trans), border-color var(--trans);
+}
+.tab-button:hover:not(.active) { background: var(--bg-card); color: var(--text); border-color: var(--border); }
+.tab-button.active { background: var(--accent-blue); color: #fff; border-color: transparent; }
+.tab-button:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+
+/* â”€â”€ Bridge card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.bridge-card { border-color: #1a2f50 !important; }
+.bridge-card .metric-value { font-size: 16px; color: var(--accent-blue); }
+
+/* â”€â”€ Responsive â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+@media (max-width: 900px) {
+  html, body { overflow: auto; }
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    height: auto;
+    overflow: visible;
+  }
+  .sidebar, .details-panel {
+    border-right: none;
+    border-left: none;
+    border-bottom: 1px solid var(--border);
+    padding: 20px 16px;
+  }
+  .metric-grid { grid-template-columns: 1fr 1fr; }
+  .main-panel { padding: 20px 16px; }
+}
+
+@media (max-width: 480px) {
+  .metric-grid { grid-template-columns: 1fr; }
+}
+
+.await-btn:disabled,
+.await-btn:disabled:hover {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: var(--bg-card);
+  border-color: var(--border);
+  color: var(--text-dim);
+  box-shadow: none;
+}
+
+
+==============================
+FILE: frontend/src/mock/mockDashboardPayload.ts
+==============================
+import type { DashboardCompactPayload, MatchItem } from "../types/dashboardPayload";
+
+const makeMatch = (
+  id: number, file_name: string, display_map_name: string,
+  match_type: string, score_label: string, seconds: number
+): MatchItem => ({
+  id,
+  file_name,
+  status: "stable",
+  parse_status: "ok",
+  parse_level: "header_only",
+  meta_status: "ok",
+  date: `2026-06-12 11-${String(60 - id * 5).padStart(2,"0")}-00`,
+  map_name: display_map_name.replace(/ /g, "_") + "_P",
+  match_type,
+  team_size: 2,
+  team0_score: parseInt(score_label.split("-")[0]),
+  team1_score: parseInt(score_label.split("-")[1]),
+  total_seconds_played: seconds,
+  replay_name: `Match ${id}`,
+  score_label,
+  seconds_label: `${(seconds / 60).toFixed(1)}`,
+  metadata_ready: true,
+  display_map_name,
+  short_map_name: display_map_name,
+  map_family: display_map_name.split(" ")[0],
+  map_variant: display_map_name.split(" ").slice(1).join(" ") || null,
+  map_name_source: "fallback",
+});
+
+const recentMatches: MatchItem[] = [
+  makeMatch(1, "match1.replay", "Stadium 10A", "Online",  "4-6", 310),
+  makeMatch(2, "match2.replay", "Stadium Day", "Online",  "2-3", 295),
+  makeMatch(3, "match3.replay", "Euro Stadium","Online",  "3-3", 300),
+  makeMatch(4, "match4.replay", "FF Dusk",     "Online",  "5-2", 280),
+  makeMatch(5, "match5.replay", "UF Night",    "Private", "1-4", 305),
+];
+
+export const mockDashboardPayload: DashboardCompactPayload = {
+  app: {
+    name: "Rocket League Analyser",
+    version: "0.1.0-dev",
+  },
+  database: {
+    path: "C:\\Users\\user\\Documents\\My Games\\RLA\\rla2.db",
+  },
+  summary: {
+    total_loaded: 35,
+    metadata_ready: 35,
+    metadata_missing: 0,
+    latest_match_date: "2026-06-12 11-46-50",
+  },
+  snapshot: {
+    loaded_matches: 35,
+    total_matches: 10,
+    metadata_ready: 10,
+    metadata_missing: 0,
+    latest_day: "2026-06-12",
+    matches_on_latest_day: 10,
+    online_matches: 9,
+    private_matches: 1,
+    other_match_types: 0,
+    most_played_map: "Stadium_10A_P",
+    most_common_team_size: 2,
+    total_seconds: 2916,
+    total_minutes_label: "48.6",
+    average_match_seconds: 291.6,
+    average_match_minutes_label: "4.9",
+    session_start: "2026-06-12 08-00-00",
+    session_end: "2026-06-12 11-46-50",
+    session_gap_hours: 2.0,
+  },
+  system_status: {
+    state: "Ready",
+    message: "Ready",
+    has_matches: true,
+    has_active_session: true,
+    total_loaded: 35,
+    metadata_ready: 35,
+    metadata_missing: 0,
+    latest_match_date: "2026-06-12 11-46-50",
+    latest_map: "Stadium_10A_P",
+    latest_display_map: "Stadium 10A",
+    latest_match_type: "Online",
+    latest_parse_level: "header_only",
+    latest_metadata_ready: true,
+    active_session_count: 10,
+  },
+  session_summary: {
+    title: "Current Session",
+    match_count: 10,
+    session_start: "2026-06-12 08-00-00",
+    session_end: "2026-06-12 11-46-50",
+    total_minutes_label: "48.6",
+    average_match_minutes_label: "4.9",
+    most_played_map: "Stadium_10A_P",
+    most_played_display_map: "Stadium 10A",
+    most_common_team_size: 2,
+    unique_maps: ["CS_Day_P", "FF_Dusk_P", "Stadium_Day_P", "UF_Day_P", "UF_Night_P"],
+    unique_display_maps: ["CS Day", "FF Dusk", "Stadium 10A", "Stadium Day", "UF Day", "UF Night"],
+    match_types: ["Online", "Private"],
+    team_sizes: [2],
+    latest_map: "Stadium_10A_P",
+    latest_display_map: "Stadium 10A",
+    latest_match_type: "Online",
+    latest_score_label: "4-6",
+  },
+  metric_cards: [
+    { id: "system_state",   label: "System",          value: "Ready",     sublabel: "Ready",                      tone: "success" },
+    { id: "loaded_replays", label: "Loaded Replays",  value: "35",        sublabel: "35 metadata ready",          tone: "neutral" },
+    { id: "active_session", label: "Active Session",  value: "10",        sublabel: "matches in current session", tone: "neutral" },
+    { id: "session_time",   label: "Session Time",    value: "48.6 min",  sublabel: "estimated replay time",      tone: "neutral" },
+    { id: "avg_match",      label: "Avg Match",       value: "4.9 min",   sublabel: "average duration",           tone: "neutral" },
+    { id: "latest_match",   label: "Latest Match",    value: "Stadium 10A", sublabel: "Online Â· 4-6",            tone: "neutral" },
+  ],
+  recent_matches: recentMatches,
+  active_session_matches: recentMatches,
+};
+
+
