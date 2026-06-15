@@ -1,0 +1,43 @@
+﻿# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Local app data / databases
+*.db
+*.sqlite
+*.sqlite3
+rla2.db
+
+# Rocket League / parsed local data
+*.replay
+parsed_replays/
+backups/
+logs/
+*.log
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/public/dashboard_payload.json
+
+# Environment / secrets
+.env
+.env.*
+*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build artifacts
+build/
+dist/
+out/

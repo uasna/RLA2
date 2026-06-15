@@ -1,0 +1,14 @@
+# RLA 2 — requirements.txt
+# Python 3.11+
+
+# ── Punto 1 (Path Resolver) ──────────────────────────────────────
+# Solo stdlib — sin dependencias externas para el core y path resolver
+
+# ── Punto 2+ (Watcher) ───────────────────────────────────────────
+watchdog>=4.0.0
+
+# ── Punto 5+ (MMR Service) ───────────────────────────────────────
+aiohttp>=3.9.0
+
+# ── Punto 9 (UI) ─────────────────────────────────────────────────
+customtkinter>=5.2.0
