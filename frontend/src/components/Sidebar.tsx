@@ -1,5 +1,6 @@
 import React from "react";
 import type { DashboardCompactPayload } from "../types/dashboardPayload";
+import type { DashboardDataSource } from "../services/dashboardData";
 
 function formatTime(d: Date): string {
   return d.toLocaleTimeString([], {
@@ -11,7 +12,7 @@ function formatTime(d: Date): string {
 
 interface SidebarProps {
   payload: DashboardCompactPayload;
-  dataSource: "mock" | "json";
+  dataSource: DashboardDataSource;
   isRefreshing: boolean;
   lastLoadedAt: Date | null;
   onRefresh: () => void;

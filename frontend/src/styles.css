@@ -332,3 +332,10 @@ body {
   font-size: 10px;
   letter-spacing: 0.02em;
 }
+
+/* ── Fase 8B: source-badge--api ────────────────────────────────── */
+.source-badge--api {
+  color: var(--success);
+  border-color: var(--tone-success-border);
+  background: var(--tone-success-bg);
+}

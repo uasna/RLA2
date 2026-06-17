@@ -1,11 +1,24 @@
 import React from "react";
 import type { SessionSummary } from "../types/dashboardPayload";
+import type { DashboardDataSource } from "../services/dashboardData";
 
 const TABS = ["Overview", "Movement", "Boost", "Offence", "Defence"];
 
 interface DetailsPanelProps {
   sessionSummary: SessionSummary;
-  dataSource: "mock" | "json";
+  dataSource: DashboardDataSource;
+}
+
+function bridgeLabel(source: DashboardDataSource): string {
+  if (source === "api")  return "Connected";
+  if (source === "json") return "Static JSON";
+  return "Ready";
+}
+
+function bridgeSub(source: DashboardDataSource): string {
+  if (source === "api")  return "Loaded from local backend API";
+  if (source === "json") return "Loaded from dashboard_payload.json";
+  return "Using mock — start API or export payload";
 }
 
 export default function DetailsPanel({
@@ -55,14 +68,8 @@ export default function DetailsPanel({
 
       <div className="metric-card bridge-card">
         <div className="metric-label">Backend bridge</div>
-        <div className="metric-value">
-          {dataSource === "json" ? "Connected" : "Ready"}
-        </div>
-        <div className="metric-sub">
-          {dataSource === "json"
-            ? "Loaded from dashboard_payload.json"
-            : "Using mock — export payload to load real data"}
-        </div>
+        <div className="metric-value">{bridgeLabel(dataSource)}</div>
+        <div className="metric-sub">{bridgeSub(dataSource)}</div>
       </div>
     </aside>
   );

@@ -1,8 +1,9 @@
 import React from "react";
 import "./styles.css";
 import type { DashboardCompactPayload } from "./types/dashboardPayload";
+import type { DashboardDataSource } from "./services/dashboardData";
 import { mockDashboardPayload } from "./mock/mockDashboardPayload";
-import { loadDashboardPayload } from "./services/dashboardData";
+import { loadDashboardPayloadWithSource } from "./services/dashboardData";
 import Sidebar from "./components/Sidebar";
 import MetricGrid from "./components/MetricGrid";
 import GameList from "./components/GameList";
@@ -11,30 +12,14 @@ import DetailsPanel from "./components/DetailsPanel";
 export default function App() {
   const [payload, setPayload] =
     React.useState<DashboardCompactPayload>(mockDashboardPayload);
-  const [dataSource, setDataSource] = React.useState<"mock" | "json">("mock");
+  const [dataSource, setDataSource] = React.useState<DashboardDataSource>("mock");
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [lastLoadedAt, setLastLoadedAt] = React.useState<Date | null>(null);
 
   const refreshPayload = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      let loaded: DashboardCompactPayload;
-      let source: "mock" | "json" = "mock";
-
-      try {
-        const res = await fetch("/dashboard_payload.json", {
-          cache: "no-store",
-        });
-        if (res.ok) {
-          loaded = (await res.json()) as DashboardCompactPayload;
-          source = "json";
-        } else {
-          loaded = await loadDashboardPayload();
-        }
-      } catch {
-        loaded = await loadDashboardPayload();
-      }
-
+      const { payload: loaded, source } = await loadDashboardPayloadWithSource();
       setPayload(loaded);
       setDataSource(source);
       setLastLoadedAt(new Date());
