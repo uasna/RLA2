@@ -16,6 +16,10 @@ interface SidebarProps {
   isRefreshing: boolean;
   lastLoadedAt: Date | null;
   onRefresh: () => void;
+  autoRefreshEnabled: boolean;
+  autoRefreshIntervalSeconds: number;
+  autoRefreshAvailable: boolean;
+  onToggleAutoRefresh: () => void;
 }
 
 export default function Sidebar({
@@ -24,9 +28,15 @@ export default function Sidebar({
   isRefreshing,
   lastLoadedAt,
   onRefresh,
+  autoRefreshEnabled,
+  autoRefreshIntervalSeconds,
+  autoRefreshAvailable,
+  onToggleAutoRefresh,
 }: SidebarProps) {
   const { system_status, session_summary, summary } = payload;
   const statusClass = system_status.state === "Ready" ? "ready" : "partial";
+
+  const autoRefreshActive = autoRefreshEnabled && autoRefreshAvailable;
 
   return (
     <aside className="sidebar">
@@ -67,6 +77,32 @@ export default function Sidebar({
       >
         {isRefreshing ? "Refreshing..." : "⟳ Refresh Payload"}
       </button>
+
+      {/* ── Auto-refresh block ── */}
+      <div className="auto-refresh-box">
+        <div className="auto-refresh-line">
+          <span className="auto-refresh-status">
+            Auto refresh:{" "}
+            <strong className={autoRefreshActive ? "ar-on" : "ar-off"}>
+              {autoRefreshActive ? "On" : "Off"}
+            </strong>
+          </span>
+        </div>
+        <div className="auto-refresh-line auto-refresh-hint">
+          Every {autoRefreshIntervalSeconds}s · API only
+          {!autoRefreshAvailable && (
+            <span className="ar-paused"> · paused</span>
+          )}
+        </div>
+        <button
+          className="auto-refresh-button"
+          onClick={onToggleAutoRefresh}
+          disabled={!autoRefreshAvailable}
+          aria-label={autoRefreshEnabled ? "Disable auto refresh" : "Enable auto refresh"}
+        >
+          {autoRefreshEnabled ? "Auto Refresh Off" : "Auto Refresh On"}
+        </button>
+      </div>
     </aside>
   );
 }
